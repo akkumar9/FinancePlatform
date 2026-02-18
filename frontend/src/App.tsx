@@ -86,7 +86,9 @@ const UrgencyBadge: React.FC<UrgencyBadgeProps> = ({ level }) => {
     medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     low: 'bg-green-100 text-green-800 border-green-200'
   };
+  
   const icons = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
+  
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium border ${colors[level]}`}>
       {icons[level]} {level.toUpperCase()}
@@ -113,6 +115,19 @@ const Dashboard: React.FC = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [caseNotes, setCaseNotes] = useState<{[key: string]: string}>({});
   const [savingNotes, setSavingNotes] = useState(false);
+  
+  // New state for create case
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCase, setNewCase] = useState({
+    employee_name: '',
+    employer: '',
+    annual_income: '',
+    credit_score: '',
+    savings: '',
+    total_debt: '',
+    dependents: ''
+  });
+  const [creatingCase, setCreatingCase] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -130,6 +145,67 @@ const Dashboard: React.FC = () => {
       alert('Backend error - make sure it\'s running on port 8000');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createCase = async () => {
+    // Validate
+    if (!newCase.employee_name || !newCase.employer) {
+      alert('Please fill in employee name and employer');
+      return;
+    }
+    
+    try {
+      setCreatingCase(true);
+      
+      const res = await fetch(`${API_BASE}/api/cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_name: newCase.employee_name,
+          employer: newCase.employer,
+          financial_snapshot: {
+            annual_income: parseInt(newCase.annual_income) || 0,
+            credit_score: parseInt(newCase.credit_score) || 0,
+            savings: parseInt(newCase.savings) || 0,
+            total_debt: parseInt(newCase.total_debt) || 0,
+            dependents: parseInt(newCase.dependents) || 0
+          }
+        })
+      });
+      
+      if (res.ok) {
+        const result = await res.json();
+        
+        // Reload cases
+        await loadData();
+        
+        // Reset form
+        setNewCase({
+          employee_name: '',
+          employer: '',
+          annual_income: '',
+          credit_score: '',
+          savings: '',
+          total_debt: '',
+          dependents: ''
+        });
+        
+        // Close modal
+        setShowCreateModal(false);
+        
+        alert('✅ Case created successfully!');
+        
+        // Auto-select the new case
+        if (result.case) {
+          selectCase(result.case);
+        }
+      }
+    } catch (error) {
+      console.error('Create case error:', error);
+      alert('Failed to create case');
+    } finally {
+      setCreatingCase(false);
     }
   };
 
@@ -304,7 +380,6 @@ const Dashboard: React.FC = () => {
         method: 'POST',
         body: formData
       });
-
       const result = await res.json();
       
       if (result.success) {
@@ -501,15 +576,24 @@ const Dashboard: React.FC = () => {
             <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-gray-900">Active Cases</h2>
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <Users className="w-4 h-4" />
+                    Create New Case
+                  </button>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -871,6 +955,146 @@ const Dashboard: React.FC = () => {
                   Save Notes
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Case Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">Create New Case</h2>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {/* Employee Info */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-900">Employee Information</h3>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Employee Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newCase.employee_name}
+                    onChange={(e) => setNewCase({...newCase, employee_name: e.target.value})}
+                    placeholder="John Smith"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Employer *
+                  </label>
+                  <input
+                    type="text"
+                    value={newCase.employer}
+                    onChange={(e) => setNewCase({...newCase, employer: e.target.value})}
+                    placeholder="Acme Corporation"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              {/* Financial Snapshot */}
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="font-semibold text-gray-900">Financial Snapshot</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Annual Income
+                    </label>
+                    <input
+                      type="number"
+                      value={newCase.annual_income}
+                      onChange={(e) => setNewCase({...newCase, annual_income: e.target.value})}
+                      placeholder="50000"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Credit Score
+                    </label>
+                    <input
+                      type="number"
+                      value={newCase.credit_score}
+                      onChange={(e) => setNewCase({...newCase, credit_score: e.target.value})}
+                      placeholder="650"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Savings
+                    </label>
+                    <input
+                      type="number"
+                      value={newCase.savings}
+                      onChange={(e) => setNewCase({...newCase, savings: e.target.value})}
+                      placeholder="1000"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:
+                      ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total Debt
+                    </label>
+                    <input
+                      type="number"
+                      value={newCase.total_debt}
+                      onChange={(e) => setNewCase({...newCase, total_debt: e.target.value})}
+                      placeholder="5000"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Number of Dependents
+                    </label>
+                    <input
+                      type="number"
+                      value={newCase.dependents}
+                      onChange={(e) => setNewCase({...newCase, dependents: e.target.value})}
+                      placeholder="0"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createCase}
+                disabled={creatingCase}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {creatingCase && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create Case
+              </button>
             </div>
           </div>
         </div>
